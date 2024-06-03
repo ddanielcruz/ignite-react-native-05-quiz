@@ -9,8 +9,10 @@ import Animated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated'
-
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { Audio } from 'expo-av'
 import { useNavigation, useRoute } from '@react-navigation/native'
+import * as Haptics from 'expo-haptics'
 
 import { styles } from './styles'
 
@@ -24,7 +26,7 @@ import { ConfirmButton } from '../../components/ConfirmButton'
 import { OutlineButton } from '../../components/OutlineButton'
 import { ProgressBar } from '../../components/ProgressBar'
 import { THEME } from '../../styles/theme'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { OverlayFeedback } from '../../components/OverlayFeedback'
 
 interface Params {
   id: string
@@ -47,6 +49,7 @@ export function Quiz() {
   const [alternativeSelected, setAlternativeSelected] = useState<null | number>(
     null,
   )
+  const [statusReply, setStatusReply] = useState(0)
 
   const scrollY = useSharedValue(0)
   const cardPosition = useSharedValue(0)
@@ -133,6 +136,16 @@ export function Quiz() {
     }
   }
 
+  async function playFeedbackSound(isCorrect: boolean) {
+    const file = isCorrect
+      ? require('../../assets/correct.mp3')
+      : require('../../assets/wrong.mp3')
+
+    const { sound } = await Audio.Sound.createAsync(file, { shouldPlay: true })
+    await sound.setPositionAsync(0)
+    await sound.playAsync()
+  }
+
   async function handleConfirm() {
     if (alternativeSelected === null) {
       return handleSkipConfirm()
@@ -140,6 +153,18 @@ export function Quiz() {
 
     if (quiz.questions[currentQuestion].correct === alternativeSelected) {
       setPoints((prevState) => prevState + 1)
+      setStatusReply(1) // Success
+
+      await Promise.all([
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+        playFeedbackSound(true),
+      ])
+    } else {
+      setStatusReply(2) // Error
+      await Promise.all([
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
+        playFeedbackSound(false),
+      ])
     }
 
     setAlternativeSelected(null)
@@ -176,6 +201,7 @@ export function Quiz() {
   useEffect(() => {
     if (quiz.questions) {
       handleNextQuestion()
+      setStatusReply(0)
     }
   }, [points])
 
@@ -185,6 +211,8 @@ export function Quiz() {
 
   return (
     <View style={styles.container}>
+      <OverlayFeedback status={statusReply} />
+
       <Animated.View style={fixedProgressBarStyle}>
         <Text style={styles.title}>{quiz.title}</Text>
 
